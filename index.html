@@ -4,151 +4,90 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Voice-Enabled Map</title>
+    <title>Advanced VoiceMap</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
-    <!-- leaflet routing machine css -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
     <script src="//cdnjs.cloudflare.com/ajax/libs/annyang/2.6.1/annyang.min.js"></script>
     <script src="//cdnjs.cloudflare.com/ajax/libs/SpeechKITT/0.3.0/speechkitt.min.js"></script>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-
-    <!-- leaflet routing machine js -->
-    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
 </head>
 <body>
-    <div id="map"></div>
-    <style>
-        #map {
-            height: 100vh;
-            width: 100%;
+<div id='map'></div>
+<style>
+#skitt-ui { z-index: 1000 !important; }
+#map { position: absolute; top: 0; bottom: 0; width: 100%; }
+</style>
+<script>
+if (annyang) {
+    SpeechKITT.annyang();
+    SpeechKITT.setStylesheet('//cdnjs.cloudflare.com/ajax/libs/SpeechKITT/0.3.0/themes/flat-clouds.css');
+    SpeechKITT.setInstructionsText("Try 'Switch to satellite view' or 'Show default time-lapse'!");
+    SpeechKITT.vroom();
+}
+
+var map = L.map("map").setView([50, 8], 5);
+
+var baseLayers = {
+    "Street Map": L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'),
+    "Satellite View": L.tileLayer('https://{s}.tile.openstreetmap.se/hydda/full/{z}/{x}/{y}.png'),
+    "Terrain View": L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png')
+};
+
+L.control.layers(baseLayers).addTo(map);
+baseLayers["Street Map"].addTo(map);
+
+const switchLayer = function(layer) {
+    map.eachLayer(function (l) {
+        map.removeLayer(l);
+    });
+    baseLayers[layer].addTo(map);
+    console.log("Switched to " + layer);
+};
+
+const showTimeLapse = function(startDate, endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const timeLayer = L.tileLayer('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/{time}/{z}/{y}/{x}.jpg', {
+        tileSize: 256,
+        opacity: 0.75,
+        time: start.toISOString().split('T')[0] + '/' + end.toISOString().split('T')[0]
+    });
+    timeLayer.addTo(map);
+    console.log(`Time-lapse from ${startDate} to ${endDate}`);
+};
+
+// Set default start and end dates
+const defaultStartDate = '2020-01-01';
+const defaultEndDate = '2020-12-31';
+showTimeLapse(defaultStartDate, defaultEndDate);
+
+const flyToCoords = function(city) {
+    const inurl = "https://nominatim.openstreetmap.org/search?q=" + city + "&limit=1&format=json&addressdetails=1";
+    $.ajax({
+        url: inurl,
+        dataType: "json",
+        success: function(data) {
+            if (data.length > 0) {
+                map.flyTo([data[0]["lat"], data[0]["lon"]], 12);
+                console.log(`Flying to ${city}`);
+            } else {
+                console.log(`City ${city} not found`);
+            }
         }
-        #skitt-ui {
-            z-index: 1000 !important;
-        }
-    </style>
-    <script>
-        // Initialize the map
-        var map = L.map('map').setView([50, 8], 5);
-        
-        L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+    });
+};
 
-        // marker
-        var marker = L.marker([51.5, -0.09]).addTo(map);
-        marker.bindPopup("<b>Hello world!</b><br>I am a popup.");
-
-        {/*L.Routing.control({
-          waypoints: [
-            L.latLng(57.74, 11.94),
-            L.latLng(57.6792, 11.949)
-          ]
-        }).addTo(map);*/}
-
-        map.on('click', function(e) {
-          console.log(e)
-
-          var secondMarker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
-           
-            L.Routing.control({
-                waypoints: [
-            L.latLng(51.5, -0.09),
-            L.latLng(e.latlng.lat, e.latlng.lng)
-          ]
-        })
-        .addTo(map);
-        })
-
-
-
-
-
-        // Function to fly to coordinates based on city name
-        const flyToCoords = function(city) {
-            const inurl = "https://nominatim.openstreetmap.org/search?q=" + city + "&limit=1&format=json&addressdetails=1";
-            console.log("City: " + city);
-            $.ajax({
-                url: inurl,
-                dataType: "json",
-                success: function(data) {
-                    console.log("API Response: ", data);
-                    if (data && data.length > 0) {
-                        const lat = parseFloat(data[0].lat);
-                        const lon = parseFloat(data[0].lon);
-                        map.flyTo([lat, lon], 12);
-                        console.log("Flying to: ", [lat, lon]);
-                    } else {
-                        alert('Location not found. Please try another city');
-                        console.log("Location not found.");
-                    }
-                },
-                error: function() {
-                    alert('Error retrieving location data. Please try again later.');
-                    console.log("Error retrieving location data.");
-                }
-            });
-        };
-
-
-        const flyToHighway = function(high) {
-            const inurl = "https://nominatim.openstreetmap.org/search?q=" + high + "&limit=1&format=json&addressdetails=1";
-            console.log("Highway: " + high);
-            $.ajax({
-                url: inurl,
-                dataType: "json",
-                success: function(data) {
-                    console.log("API Response: ", data);
-                    if (data && data.length > 0) {
-                        const lat = parseFloat(data[0].lat);
-                        const lon = parseFloat(data[0].lon);
-                        map.flyTo([lat, lon], 200);
-                        console.log("Flying to: ", [lat, lon]);
-                    } else {
-                        alert('Location not found. Please try another city');
-                        console.log("Location not found.");
-                    }
-                },
-                error: function() {
-                    alert('Error retrieving location data. Please try again later.');
-                    console.log("Error retrieving location data.");
-                }
-            });
-        };
-
-        // Function to stop listening
-        const stopListening = function() {
-            annyang.abort();
-            console.log("Stopped listening.");
-        };
-
-        // Initialize annyang and set up commands
-        if (annyang) {
-            // Log all recognized speech
-            annyang.addCallback('result', function(phrases) {
-                console.log('Recognized phrase:', phrases[0]);
-                console.log('Other possible phrases:', phrases);
-            });
-
-            // Configure SpeechKITT
-            SpeechKITT.annyang();
-            SpeechKITT.setStylesheet('//cdnjs.cloudflare.com/ajax/libs/SpeechKITT/0.3.0/themes/flat-clouds.css');
-            SpeechKITT.setInstructionsText("Try 'Fly to Berlin' or any other city!");
-            SpeechKITT.vroom();
-
-            // Define voice commands
-            const commands = {
-                'hello': () => { alert('Hey there, try some commands!'); },
-                'go to *city': flyToCoords,
-                'stop listening': stopListening,
-                'go to *highway': flyToHighway,
-            };
-            annyang.addCommands(commands);
-            annyang.start();
-            console.log("Voice recognition started.");
-        } else {
-            console.log("annyang is not supported in this browser.");
-        }
-    </script>
+if (annyang) {
+    const commands = {
+        'satellite': () => { switchLayer('Satellite View'); },
+        'switch': () => { switchLayer('Terrain View'); },
+        'map': () => { switchLayer('Street Map'); },
+        'time': () => { showTimeLapse(defaultStartDate, defaultEndDate); },
+        'go to *city': flyToCoords
+    };
+    annyang.addCommands(commands);
+    annyang.start();
+}
+</script>
 </body>
 </html>
